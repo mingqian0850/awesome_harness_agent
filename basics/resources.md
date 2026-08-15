@@ -39,6 +39,8 @@
 
 ## 📰 值得关注的信息源
 
+- **GitHub 开源项目精选**：[README 第 2-7 节](../README.md#-开源项目精选)按 6 大类整合了编码 agent、
+  框架、协议、评测、沙箱、可观测性项目，第 7 节聚合了 10 个现存 awesome 列表（含中文的 Awesome-MCP-ZH）
 - **arXiv**：cs.AI / cs.CL / cs.LG 分类（本仓库每周自动抓取）
 - **Hacker News / Reddit r/LocalLLaMA**：harness 工程实践讨论密集
 - **各框架官方博客**：LangChain、Anthropic Engineering、OpenAI 等
