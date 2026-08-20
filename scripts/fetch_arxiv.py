@@ -120,6 +120,50 @@ def relevance_score(entry: dict) -> int:
     return score
 
 
+# ---- 主题门控：只有真正属于 agent 生态的论文才收录 ----
+TITLE_AGENT = re.compile(
+    r"\b(agent|agentic|harness|react|mcp|tool|multi[- ]?agent|orchestrat|swarm|"
+    r"scaffold|self-play|post-training|computer use|debate|memory)\b", re.I
+)
+TITLE_LLM = re.compile(r"\b(llm|language model)\b", re.I)
+WEAK_WORDS = ["benchmark", "framework", "platform", "eval", "survey", "system", "environment"]
+BLOCKED_FILE = os.path.join(ROOT, "scripts", "blocked_ids.json")
+
+
+def load_blocked() -> set:
+    if os.path.exists(BLOCKED_FILE):
+        try:
+            with open(BLOCKED_FILE, encoding="utf-8") as f:
+                return set(json.load(f))
+        except (json.JSONDecodeError, OSError):
+            pass
+    return set()
+
+
+def is_on_topic(entry: dict) -> bool:
+    """收录门控：过滤经典 DRL、纯检索、API 框架等蹭关键词的论文。"""
+    title = entry["title"]
+    abstract = entry["summary"]
+    t = title.lower()
+
+    # 经典 DRL 论文（非 LLM agent）
+    if re.search(r"\bdeep reinforcement learning\b", t) and not re.search(r"\b(llm|language model)\b", t):
+        return False
+    # 纯检索类论文（无 agent/memory/tool 上下文）
+    if "retrieval" in t and "memory" not in t and not TITLE_AGENT.search(title):
+        return False
+    # 标题强信号（agent/harness/tool/mcp/react 等）
+    if TITLE_AGENT.search(title):
+        return True
+    # 标题只有 LLM 信号 → 摘要必须确有其事（出现 agents）
+    if TITLE_LLM.search(title):
+        return bool(re.search(r"\bagents?\b", abstract, re.I))
+    # 标题是 benchmark/framework 等泛词 → 摘要必须出现 agents
+    if any(w in t for w in WEAK_WORDS):
+        return bool(re.search(r"\bagents?\b", abstract, re.I))
+    return False
+
+
 def snippet(summary: str, limit: int = 150) -> str:
     """取摘要第一句，截断到 limit 字符。"""
     first = re.split(r"(?<=[.!?])\s+", summary)[0]
@@ -168,12 +212,15 @@ def main() -> int:
     print(f"[1/3] 抓取 arXiv（{len(TOPIC_QUERIES)} 个主题查询，窗口 {window_start} ~ {today}）...")
 
     state = load_state()
+    blocked = load_blocked()
     seen_in_run, collected = set(), []
     for i, q in enumerate(TOPIC_QUERIES, 1):
         for e in fetch_topic(q):
-            if e["id"] in seen_in_run or e["published"] < window_start:
+            if e["id"] in seen_in_run or e["id"] in blocked or e["published"] < window_start:
                 continue
             seen_in_run.add(e["id"])
+            if not is_on_topic(e):
+                continue
             e["score"] = relevance_score(e)
             if e["score"] >= args.min_score:
                 collected.append(e)
