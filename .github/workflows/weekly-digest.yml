@@ -12,6 +12,7 @@ permissions:
 jobs:
   digest:
     runs-on: ubuntu-latest
+    timeout-minutes: 30        # 防止 arXiv 限流导致任务长时间挂起
     steps:
       - name: Checkout
         uses: actions/checkout@v7
@@ -21,8 +22,26 @@ jobs:
         with:
           python-version: '3.12'
 
+      # 脚本内置安全阀：抓取异常时以非 0 退出且不覆盖已有 digest
       - name: Fetch arXiv digest
+        id: fetch
+        continue-on-error: true
         run: python3 scripts/fetch_arxiv.py --days 7 --max-results 30
+
+      # 常见失败原因是 arXiv 限流（HTTP 429），冷却后重试一次
+      - name: Retry after cooldown (arXiv 限流时)
+        id: retry
+        if: steps.fetch.outcome == 'failure'
+        run: |
+          echo "首次抓取失败（可能被 arXiv 限流），冷却 5 分钟后重试 ..."
+          sleep 300
+          python3 scripts/fetch_arxiv.py --days 7 --max-results 30
+
+      - name: Fail visibly if both attempts failed
+        if: steps.fetch.outcome == 'failure' && steps.retry.outcome == 'failure'
+        run: |
+          echo "::error::两次抓取均失败，已保留上一期内容，未做任何提交。请稍后在 Actions 页面手动重跑。"
+          exit 1
 
       - name: Commit and push changes
         run: |

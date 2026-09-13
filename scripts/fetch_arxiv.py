@@ -50,6 +50,10 @@ TOPIC_QUERIES = [
     f'{CATS} AND (abs:"agent evaluation" OR abs:"agent benchmark")',
 ]
 
+# 合并成单次查询：arXiv 限流严格，1 次请求远好于 12 次（默认模式）
+_TERMS = [q.split(" AND ", 1)[1] for q in TOPIC_QUERIES]
+COMBINED_QUERY = f"{CATS} AND (" + " OR ".join(f"({t})" for t in _TERMS) + ")"
+
 # 相关性打分关键词：命中标题权重 x2，命中摘要权重 x1
 KEYWORDS = {
     "agent": 2, "harness": 3, "tool use": 3, "tool calling": 3,
@@ -64,10 +68,16 @@ STRONG_TITLE = ["harness", "react", "mcp", "model context protocol", "tool use",
                 "tool calling", "computer use", "agentic", "swarm", "multi-agent"]
 
 MIN_SCORE = 4
+# arXiv 要求客户端标识自己（含联系方式），否则容易被限流
+USER_AGENT = "awesome-harness-agent-digest/1.0 (+https://github.com/mingqian0850/awesome_harness_agent)"
 
 
-def fetch_topic(query: str, max_results: int = 20, retries: int = 2) -> list:
-    """执行一次 arXiv API 查询，返回条目字典列表。"""
+def fetch_topic(query: str, max_results: int = 20, retries: int = 3):
+    """执行一次 arXiv API 查询。
+
+    成功返回条目列表（可能为空列表），彻底失败返回 None —— 调用方据此区分
+    "本期无相关论文" 与 "抓取失败"，避免把失败当成空结果写坏 digest。
+    """
     params = urllib.parse.urlencode({
         "search_query": query,
         "start": 0,
@@ -78,8 +88,8 @@ def fetch_topic(query: str, max_results: int = 20, retries: int = 2) -> list:
     url = f"{ARXIV_API}?{params}"
     for attempt in range(retries + 1):
         try:
-            req = urllib.request.Request(url, headers={"User-Agent": "awesome-harness-agent-digest/1.0"})
-            with urllib.request.urlopen(req, timeout=30) as resp:
+            req = urllib.request.Request(url, headers={"User-Agent": USER_AGENT})
+            with urllib.request.urlopen(req, timeout=25) as resp:
                 root = ET.fromstring(resp.read())
             entries = []
             for e in root.findall("atom:entry", NS):
@@ -98,12 +108,22 @@ def fetch_topic(query: str, max_results: int = 20, retries: int = 2) -> list:
                     "authors": [a.find("atom:name", NS).text for a in e.findall("atom:author", NS)],
                 })
             return entries
+        except urllib.error.HTTPError as exc:  # 429/503 = 被限流，需要更长退避
+            retry_after = (exc.headers.get("Retry-After") if exc.headers else None) or ""
+            wait = int(retry_after) if retry_after.isdigit() else 20 * (attempt + 1)
+            if attempt < retries:
+                print(f"  [retry] HTTP {exc.code} 限流，等待 {wait}s ...", file=sys.stderr)
+                time.sleep(wait)
+                continue
+            print(f"  [warn] query failed after {retries + 1} attempts: HTTP {exc.code}", file=sys.stderr)
+            return None
         except Exception as exc:  # noqa: BLE001 — 网络/解析错误统一重试
             if attempt < retries:
-                time.sleep(5 * (attempt + 1))
-            else:
-                print(f"  [warn] query failed: {exc}", file=sys.stderr)
-    return []
+                time.sleep(10 * (attempt + 1))
+                continue
+            print(f"  [warn] query failed: {exc}", file=sys.stderr)
+            return None
+    return None
 
 
 def relevance_score(entry: dict) -> int:
@@ -205,32 +225,66 @@ def main() -> int:
     ap.add_argument("--days", type=int, default=7, help="时间窗口（天），默认 7")
     ap.add_argument("--max-results", type=int, default=30, help="本期最多收录篇数，默认 30")
     ap.add_argument("--min-score", type=int, default=MIN_SCORE, help="相关性最低分，默认 4")
+    ap.add_argument("--sleep", type=float, default=6.0, help="查询间隔秒数（arXiv 建议 ≥3s），默认 6")
+    ap.add_argument("--per-topic", action="store_true",
+                    help="改用 12 个独立主题查询（默认单次合并查询，更不易被 arXiv 限流）")
+    ap.add_argument("--fetch-limit", type=int, default=300,
+                    help="单次合并查询拉取的最大条目数，默认 300")
+    ap.add_argument("--fetch-retries", type=int, default=5,
+                    help="每次查询遇到限流时的最大重试次数，默认 5")
+    ap.add_argument("--min-papers", type=int, default=3,
+                    help="收录数低于该值视为抓取异常，中止且不覆盖已有文件，默认 3")
+    ap.add_argument("--max-fail-ratio", type=float, default=0.4,
+                    help="查询失败比例上限，超过则中止且不覆盖已有文件，默认 0.4")
     args = ap.parse_args()
 
     today = date.today()
     window_start = (today - timedelta(days=args.days)).isoformat()
-    print(f"[1/3] 抓取 arXiv（{len(TOPIC_QUERIES)} 个主题查询，窗口 {window_start} ~ {today}）...")
+
+    # 默认：把 12 个主题合并成 1 次查询（arXiv 限流严格，请求数越少越稳）
+    queries = ([(q, 20) for q in TOPIC_QUERIES] if args.per_topic
+               else [(COMBINED_QUERY, args.fetch_limit)])
+    print(f"[1/3] 抓取 arXiv（{len(queries)} 个查询，窗口 {window_start} ~ {today}）...")
 
     state = load_state()
     blocked = load_blocked()
-    seen_in_run, collected = set(), []
-    for i, q in enumerate(TOPIC_QUERIES, 1):
-        for e in fetch_topic(q):
-            if e["id"] in seen_in_run or e["id"] in blocked or e["published"] < window_start:
-                continue
-            seen_in_run.add(e["id"])
-            if not is_on_topic(e):
-                continue
-            e["score"] = relevance_score(e)
-            if e["score"] >= args.min_score:
-                collected.append(e)
-        if i < len(TOPIC_QUERIES):
-            time.sleep(3.5)  # arXiv API 建议请求间隔
+    seen_in_run, collected, failed = set(), [], 0
 
+    for i, (q, limit) in enumerate(queries, 1):
+        result = fetch_topic(q, max_results=limit, retries=args.fetch_retries)
+        if result is None:          # 查询彻底失败（限流/超时），与"无结果"区分
+            failed += 1
+        else:
+            dates = sorted(e["published"] for e in result if e.get("published"))
+            span = f"{dates[0]} ~ {dates[-1]}" if dates else "—"
+            print(f"  查询 {i}/{len(queries)} 返回 {len(result)} 条（{span}）")
+            for e in result:
+                if e["id"] in seen_in_run or e["id"] in blocked or e["published"] < window_start:
+                    continue
+                seen_in_run.add(e["id"])
+                if not is_on_topic(e):
+                    continue
+                e["score"] = relevance_score(e)
+                if e["score"] >= args.min_score:
+                    collected.append(e)
+        if i < len(queries):
+            time.sleep(args.sleep)  # 尊重 arXiv 速率限制
+
+    total_q = len(queries)
     collected.sort(key=lambda e: (e["published"], e["score"]), reverse=True)
     picked = collected[: args.max_results]
 
-    print(f"  命中 {len(collected)} 篇，收录 {len(picked)} 篇")
+    print(f"  查询成功 {total_q - failed}/{total_q}，命中 {len(collected)} 篇，收录 {len(picked)} 篇")
+
+    # ---- 安全阀：抓取异常时中止，绝不覆盖上一期的好内容 ----
+    if failed / total_q > args.max_fail_ratio:
+        print(f"[abort] {failed}/{total_q} 个查询失败（arXiv 限流或服务异常），"
+              f"本次不更新任何文件，保留上一期内容。", file=sys.stderr)
+        return 2
+    if len(picked) < args.min_papers:
+        print(f"[abort] 仅收录 {len(picked)} 篇（低于阈值 {args.min_papers}），疑似抓取异常，"
+              f"本次不更新任何文件，保留上一期内容。", file=sys.stderr)
+        return 2
 
     for e in picked:
         state[e["id"]] = e["published"]
