@@ -21,6 +21,9 @@
   Actions 页面手动触发。
 - 稳健性：arXiv API 限流（HTTP 429）时会自动退避重试、冷却后再试一次；
   若抓取仍失败或结果异常偏少，脚本会**中止并保留上一期内容**，不会写入空结果。
+- 备用数据源：arXiv API 不可用时会自动切换到 **OpenAlex**（索引 arXiv 预印本的第三方数据库）。
+  该通道下"分类"列显示的是 OpenAlex 学科领域（如 Artificial Intelligence），而非 arXiv 分类号。
+- 手动运行：`python3 scripts/fetch_arxiv.py --days 7 [--source openalex]`（`--per-topic` 可切换查询策略）。
 
 ## 🧰 开源项目精选
 

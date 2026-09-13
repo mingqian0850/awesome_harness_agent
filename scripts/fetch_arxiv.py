@@ -220,6 +220,134 @@ def render_table(entries: list) -> str:
     return "\n".join(lines)
 
 
+# ---- 备用数据源：OpenAlex（索引 arXiv 预印本，限流宽松，arXiv API 不可用时顶上） ----
+OPENALEX_API = "https://api.openalex.org/works"
+OPENALEX_MAILTO = "mingqian0850@users.noreply.github.com"
+OA_TERM_GROUPS = [
+    '"agent harness"',
+    '"model context protocol"',
+    '"tool calling" OR "tool use" OR "function calling"',
+    '"LLM agent" OR "language model agent" OR "LLM-based agent"',
+    "agentic",
+    '"multi-agent"',
+    '"computer use" OR orchestrator',
+    '"agent benchmark" OR "agent evaluation" OR "harness evolution"',
+]
+
+
+def _openalex_abstract(inverted: dict) -> str:
+    """OpenAlex 用倒排索引存摘要，这里还原成正常文本。"""
+    if not inverted:
+        return ""
+    positions = [(p, w) for w, ps in inverted.items() for p in ps]
+    positions.sort()
+    return " ".join(w for _, w in positions)
+
+
+def _openalex_to_entry(w: dict):
+    """把 OpenAlex work 转成本脚本统一的 entry 结构；非 arXiv 记录返回 None。"""
+    aid = None
+    for loc in w.get("locations") or []:
+        m = re.search(r"arxiv\.org/abs/([0-9]{4}\.[0-9]{4,5})", (loc or {}).get("landing_page_url") or "")
+        if m:
+            aid = m.group(1)
+            break
+    if aid is None:
+        m = re.search(r"arxiv\.([0-9]{4}\.[0-9]{4,5})", w.get("doi") or "")
+        aid = m.group(1) if m else None
+    if aid is None:
+        return None
+    subfield = (w.get("primary_topic") or {}).get("subfield") or {}
+    return {
+        "id": aid,
+        "url": f"https://arxiv.org/abs/{aid}",
+        "title": " ".join((w.get("title") or w.get("display_name") or "").split()),
+        "summary": " ".join(_openalex_abstract(w.get("abstract_inverted_index") or {}).split()),
+        "published": (w.get("publication_date") or "")[:10],
+        "category": subfield.get("display_name") or "arXiv",
+        "authors": [a.get("author", {}).get("display_name", "") for a in w.get("authorships") or []],
+    }
+
+
+def fetch_openalex_group(group: str, start: str, per_page: int = 25, retries: int = 2):
+    """查询一组 OpenAlex 关键词；成功返回 works 列表，彻底失败返回 None。
+
+    注意：OpenAlex 在 per-page 较大或带 sort 时响应会明显变慢，因此用
+    小分页 + select 限定字段 + 默认相关性排序（实测单次约 15s）。
+    """
+    params = urllib.parse.urlencode({
+        "filter": f"from_publication_date:{start},title_and_abstract.search:{group}",
+        "per-page": per_page,
+        "select": "id,doi,title,publication_date,authorships,primary_topic,locations,abstract_inverted_index",
+        "mailto": OPENALEX_MAILTO,
+    })
+    url = f"{OPENALEX_API}?{params}"
+    for attempt in range(retries + 1):
+        try:
+            req = urllib.request.Request(url, headers={"User-Agent": USER_AGENT})
+            with urllib.request.urlopen(req, timeout=60) as resp:
+                return json.loads(resp.read().decode("utf-8")).get("results", [])
+        except Exception as exc:  # noqa: BLE001
+            if attempt < retries:
+                time.sleep(5 * (attempt + 1))
+                continue
+            print(f"  [warn] openalex query failed: {exc}", file=sys.stderr)
+            return None
+    return None
+
+
+def collect_from_arxiv(queries, window_start, blocked, min_score, sleep, retries):
+    """从 arXiv API 抓取并筛选，返回 (entries, 失败查询数, 查询总数)。"""
+    entries, failed, seen = [], 0, set()
+    for i, (q, limit) in enumerate(queries, 1):
+        result = fetch_topic(q, max_results=limit, retries=retries)
+        if result is None:              # 彻底失败（限流/超时），与"无结果"区分
+            failed += 1
+        else:
+            dates = sorted(e["published"] for e in result if e.get("published"))
+            span = f"{dates[0]} ~ {dates[-1]}" if dates else "—"
+            print(f"  arxiv 查询 {i}/{len(queries)} 返回 {len(result)} 条（{span}）")
+            for e in result:
+                if e["id"] in seen or e["id"] in blocked or e["published"] < window_start:
+                    continue
+                seen.add(e["id"])
+                if not is_on_topic(e):
+                    continue
+                e["score"] = relevance_score(e)
+                if e["score"] >= min_score:
+                    entries.append(e)
+        if i < len(queries):
+            time.sleep(sleep)           # 尊重 arXiv 速率限制
+    return entries, failed, len(queries)
+
+
+def collect_from_openalex(window_start, blocked, min_score):
+    """从 OpenAlex 备用源抓取，返回 (entries, 失败查询数, 查询总数)。"""
+    entries, failed, seen = [], 0, set()
+    for group in OA_TERM_GROUPS:
+        res = fetch_openalex_group(group, window_start)
+        if res is None:
+            failed += 1
+            continue
+        kept = 0
+        for w in res:
+            e = _openalex_to_entry(w)
+            if not e or not e["summary"]:
+                continue
+            if e["id"] in seen or e["id"] in blocked or e["published"] < window_start:
+                continue
+            seen.add(e["id"])
+            if not is_on_topic(e):
+                continue
+            e["score"] = relevance_score(e)
+            if e["score"] >= min_score:
+                entries.append(e)
+                kept += 1
+        print(f"  openalex: {group[:40]:42s} 返回 {len(res):3d} 条 → 收录 {kept}")
+        time.sleep(1)
+    return entries, failed, len(OA_TERM_GROUPS)
+
+
 def main() -> int:
     ap = argparse.ArgumentParser(description="Agent Harness 每周 arXiv 论文精选")
     ap.add_argument("--days", type=int, default=7, help="时间窗口（天），默认 7")
@@ -236,55 +364,47 @@ def main() -> int:
                     help="收录数低于该值视为抓取异常，中止且不覆盖已有文件，默认 3")
     ap.add_argument("--max-fail-ratio", type=float, default=0.4,
                     help="查询失败比例上限，超过则中止且不覆盖已有文件，默认 0.4")
+    ap.add_argument("--source", choices=["auto", "arxiv", "openalex"], default="auto",
+                    help="数据源：auto=先 arXiv，失败时自动切 OpenAlex 备用源（默认）")
     args = ap.parse_args()
 
     today = date.today()
     window_start = (today - timedelta(days=args.days)).isoformat()
 
-    # 默认：把 12 个主题合并成 1 次查询（arXiv 限流严格，请求数越少越稳）
-    queries = ([(q, 20) for q in TOPIC_QUERIES] if args.per_topic
-               else [(COMBINED_QUERY, args.fetch_limit)])
-    print(f"[1/3] 抓取 arXiv（{len(queries)} 个查询，窗口 {window_start} ~ {today}）...")
-
     state = load_state()
     blocked = load_blocked()
-    seen_in_run, collected, failed = set(), [], 0
 
-    for i, (q, limit) in enumerate(queries, 1):
-        result = fetch_topic(q, max_results=limit, retries=args.fetch_retries)
-        if result is None:          # 查询彻底失败（限流/超时），与"无结果"区分
-            failed += 1
+    # ---- 抓取阶段：按顺序尝试数据源，任一成功即采用 ----
+    order = ["arxiv", "openalex"] if args.source == "auto" else [args.source]
+    collected, used_source, diagnostics = [], None, []
+    for name in order:
+        print(f"[1/3] 数据源 {name}（窗口 {window_start} ~ {today}）...")
+        if name == "arxiv":
+            # 默认把 12 个主题合并成 1 次查询（arXiv 限流严格，请求数越少越稳）
+            queries = ([(q, 20) for q in TOPIC_QUERIES] if args.per_topic
+                       else [(COMBINED_QUERY, args.fetch_limit)])
+            entries, failed, total = collect_from_arxiv(
+                queries, window_start, blocked, args.min_score, args.sleep, args.fetch_retries)
         else:
-            dates = sorted(e["published"] for e in result if e.get("published"))
-            span = f"{dates[0]} ~ {dates[-1]}" if dates else "—"
-            print(f"  查询 {i}/{len(queries)} 返回 {len(result)} 条（{span}）")
-            for e in result:
-                if e["id"] in seen_in_run or e["id"] in blocked or e["published"] < window_start:
-                    continue
-                seen_in_run.add(e["id"])
-                if not is_on_topic(e):
-                    continue
-                e["score"] = relevance_score(e)
-                if e["score"] >= args.min_score:
-                    collected.append(e)
-        if i < len(queries):
-            time.sleep(args.sleep)  # 尊重 arXiv 速率限制
+            entries, failed, total = collect_from_openalex(window_start, blocked, args.min_score)
 
-    total_q = len(queries)
+        ok = total > 0 and failed / total <= args.max_fail_ratio and len(entries) >= args.min_papers
+        diagnostics.append(f"{name} 失败 {failed}/{total}、命中 {len(entries)} 篇")
+        print(f"  → {name}: {'可用' if ok else '不可用'}（失败 {failed}/{total}，命中 {len(entries)} 篇）")
+        if ok:
+            collected, used_source = entries, name
+            break
+
+    # ---- 安全阀：所有数据源都不可用时中止，绝不覆盖上一期的好内容 ----
+    if used_source is None:
+        print("[abort] 所有数据源均不可用（" + "；".join(diagnostics)
+              + "），本次不更新任何文件，保留上一期内容。", file=sys.stderr)
+        return 2
+
     collected.sort(key=lambda e: (e["published"], e["score"]), reverse=True)
     picked = collected[: args.max_results]
-
-    print(f"  查询成功 {total_q - failed}/{total_q}，命中 {len(collected)} 篇，收录 {len(picked)} 篇")
-
-    # ---- 安全阀：抓取异常时中止，绝不覆盖上一期的好内容 ----
-    if failed / total_q > args.max_fail_ratio:
-        print(f"[abort] {failed}/{total_q} 个查询失败（arXiv 限流或服务异常），"
-              f"本次不更新任何文件，保留上一期内容。", file=sys.stderr)
-        return 2
-    if len(picked) < args.min_papers:
-        print(f"[abort] 仅收录 {len(picked)} 篇（低于阈值 {args.min_papers}），疑似抓取异常，"
-              f"本次不更新任何文件，保留上一期内容。", file=sys.stderr)
-        return 2
+    source_label = "arXiv API" if used_source == "arxiv" else "OpenAlex（arXiv 备用源）"
+    print(f"  采用数据源：{source_label}，收录 {len(picked)} 篇")
 
     for e in picked:
         state[e["id"]] = e["published"]
@@ -296,7 +416,7 @@ def main() -> int:
     archive_file = os.path.join(ARCHIVE_DIR, f"{today.isoformat()}.md")
     with open(archive_file, "w", encoding="utf-8") as f:
         f.write(f"# arXiv 论文精选快照 · {today.isoformat()}\n\n")
-        f.write(f"收录 **{len(picked)}** 篇（窗口: 近 {args.days} 天，按相关性与时间排序）\n\n")
+        f.write(f"收录 **{len(picked)}** 篇（窗口: 近 {args.days} 天 · 数据源: {source_label}，按相关性与时间排序）\n\n")
         f.write(render_table(picked))
         f.write("\n\n---\n\n## 完整摘要\n\n")
         for e in picked:
@@ -310,10 +430,11 @@ def main() -> int:
     digest = "\n".join([
         "# 📚 arXiv 论文精选（Agent Harness 生态）",
         "",
-        "> 本页由 GitHub Actions 每周自动更新（`scripts/fetch_arxiv.py` 抓取 arXiv API）。",
+        "> 本页由 GitHub Actions 每周自动更新（`scripts/fetch_arxiv.py` 抓取 arXiv API，",
+        "> arXiv 限流时自动切换到 OpenAlex 备用源）。",
         "> 覆盖范围：agent harness / LLM agent / tool use / MCP / ReAct / 多智能体 / agent 评测（广义 Agent 生态）。",
         "",
-        f"**最近更新**: {today.isoformat()} · 收录 **{len(picked)}** 篇（窗口: 近 {args.days} 天）",
+        f"**最近更新**: {today.isoformat()} · 收录 **{len(picked)}** 篇（窗口: 近 {args.days} 天 · 数据源: {source_label}）",
         "",
         "## 本期新论文",
         "",
