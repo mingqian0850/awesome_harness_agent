@@ -15,9 +15,12 @@
 """
 
 import argparse
+import gzip
 import json
 import os
 import re
+import shutil
+import subprocess
 import sys
 import time
 import urllib.parse
@@ -72,6 +75,33 @@ MIN_SCORE = 4
 USER_AGENT = "awesome-harness-agent-digest/1.0 (+https://github.com/mingqian0850/awesome_harness_agent)"
 
 
+def _read_body(resp) -> bytes:
+    """读取响应体，必要时解压（arXiv/OpenAlex 均支持 gzip，可显著减少传输量）。"""
+    raw = resp.read()
+    if (resp.headers.get("Content-Encoding") or "").lower() == "gzip":
+        try:
+            raw = gzip.decompress(raw)
+        except OSError:
+            pass
+    return raw
+
+
+def _curl_get(url: str, timeout: int):
+    """用 curl 取 JSON（对抖动网络更耐受，支持 HTTP/2 与 gzip），返回 works 列表。"""
+    if not shutil.which("curl"):
+        raise RuntimeError("curl 不可用")
+    proc = subprocess.run(
+        ["curl", "-sS", "--compressed", "--max-time", str(timeout), "-A", USER_AGENT,
+         "-w", "\n%{http_code}", url],
+        capture_output=True, timeout=timeout + 20)
+    if proc.returncode != 0:
+        raise RuntimeError((proc.stderr.decode(errors="replace") or "curl failed")[:200])
+    body, _, code = proc.stdout.rpartition(b"\n")
+    if (code or b"").strip() != b"200":
+        raise RuntimeError(f"HTTP {(code or b'').decode(errors='replace').strip()}")
+    return json.loads(body.decode("utf-8")).get("results", [])
+
+
 def fetch_topic(query: str, max_results: int = 20, retries: int = 3):
     """执行一次 arXiv API 查询。
 
@@ -88,9 +118,10 @@ def fetch_topic(query: str, max_results: int = 20, retries: int = 3):
     url = f"{ARXIV_API}?{params}"
     for attempt in range(retries + 1):
         try:
-            req = urllib.request.Request(url, headers={"User-Agent": USER_AGENT})
+            req = urllib.request.Request(url, headers={"User-Agent": USER_AGENT,
+                                                      "Accept-Encoding": "gzip"})
             with urllib.request.urlopen(req, timeout=25) as resp:
-                root = ET.fromstring(resp.read())
+                root = ET.fromstring(_read_body(resp))
             entries = []
             for e in root.findall("atom:entry", NS):
                 raw_id = e.find("atom:id", NS).text
@@ -269,11 +300,12 @@ def _openalex_to_entry(w: dict):
     }
 
 
-def fetch_openalex_group(group: str, start: str, per_page: int = 25, retries: int = 2):
+def fetch_openalex_group(group: str, start: str, per_page: int = 25, retries: int = 3):
     """查询一组 OpenAlex 关键词；成功返回 works 列表，彻底失败返回 None。
 
     注意：OpenAlex 在 per-page 较大或带 sort 时响应会明显变慢，因此用
-    小分页 + select 限定字段 + 默认相关性排序（实测单次约 15s）。
+    小分页 + select 限定字段 + 默认相关性排序。先试 urllib，失败时改用 curl
+    （实测在抖动网络上 curl 成功率明显更高）。
     """
     params = urllib.parse.urlencode({
         "filter": f"from_publication_date:{start},title_and_abstract.search:{group}",
@@ -284,9 +316,12 @@ def fetch_openalex_group(group: str, start: str, per_page: int = 25, retries: in
     url = f"{OPENALEX_API}?{params}"
     for attempt in range(retries + 1):
         try:
-            req = urllib.request.Request(url, headers={"User-Agent": USER_AGENT})
-            with urllib.request.urlopen(req, timeout=60) as resp:
-                return json.loads(resp.read().decode("utf-8")).get("results", [])
+            if attempt % 2 == 0:      # 先用 curl（实测成功率更高），失败再回退 urllib
+                return _curl_get(url, timeout=110)
+            req = urllib.request.Request(url, headers={"User-Agent": USER_AGENT,
+                                                      "Accept-Encoding": "gzip"})
+            with urllib.request.urlopen(req, timeout=75) as resp:
+                return json.loads(_read_body(resp).decode("utf-8")).get("results", [])
         except Exception as exc:  # noqa: BLE001
             if attempt < retries:
                 time.sleep(5 * (attempt + 1))
