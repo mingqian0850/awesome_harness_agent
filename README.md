@@ -154,7 +154,9 @@
 
 ## 📖 基础知识
 
-见 [basics/](basics/)：学习路径、核心概念、术语表、更多资源。
+见 [basics/](basics/)：学习路径、[核心概念](basics/concepts.md)、[术语表](basics/glossary.md)、
+[研究前沿](basics/research-frontiers.md)（安全 / Harnessed RL / 自演化 / 记忆与技能 / 评测基准）、
+[学习资源](basics/resources.md)。
 
 ## 🤝 参与贡献
 

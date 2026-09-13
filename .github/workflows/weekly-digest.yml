@@ -28,14 +28,15 @@ jobs:
         continue-on-error: true
         run: python3 scripts/fetch_arxiv.py --days 7 --max-results 30
 
-      # 常见失败原因是 arXiv 限流（HTTP 429），冷却后重试一次
-      - name: Retry after cooldown (arXiv 限流时)
+      # 常见失败原因是 arXiv 限流（HTTP 429）。冷却后换一种查询策略再试：
+      # 首次用单次合并查询；重试改用 12 个较简单的独立查询，降低单次查询开销。
+      - name: Retry after cooldown (换用 per-topic 策略)
         id: retry
         if: steps.fetch.outcome == 'failure'
         run: |
-          echo "首次抓取失败（可能被 arXiv 限流），冷却 5 分钟后重试 ..."
+          echo "首次抓取失败（可能被 arXiv 限流），冷却 5 分钟后改用 per-topic 策略重试 ..."
           sleep 300
-          python3 scripts/fetch_arxiv.py --days 7 --max-results 30
+          python3 scripts/fetch_arxiv.py --days 7 --max-results 30 --per-topic --sleep 8
 
       - name: Fail visibly if both attempts failed
         if: steps.fetch.outcome == 'failure' && steps.retry.outcome == 'failure'
