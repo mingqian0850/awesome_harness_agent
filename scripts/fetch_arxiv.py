@@ -468,6 +468,7 @@ def main() -> int:
         "> 本页由 GitHub Actions 每周自动更新（`scripts/fetch_arxiv.py` 抓取 arXiv API，",
         "> arXiv 限流时自动切换到 OpenAlex 备用源）。",
         "> 覆盖范围：agent harness / LLM agent / tool use / MCP / ReAct / 多智能体 / agent 评测（广义 Agent 生态）。",
+        f"> 收录的是**近 {args.days} 天滚动窗口**内的论文，因此与相邻一期可能有重叠；完整历史见下方归档。",
         "",
         f"**最近更新**: {today.isoformat()} · 收录 **{len(picked)}** 篇（窗口: 近 {args.days} 天 · 数据源: {source_label}）",
         "",
