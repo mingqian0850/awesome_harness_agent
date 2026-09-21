@@ -436,7 +436,8 @@ def main() -> int:
               + "），本次不更新任何文件，保留上一期内容。", file=sys.stderr)
         return 2
 
-    collected.sort(key=lambda e: (e["published"], e["score"]), reverse=True)
+    # 相关性优先、日期次之：避免"最新一天的论文"挤掉整周里更对口的工作
+    collected.sort(key=lambda e: (e["score"], e["published"]), reverse=True)
     picked = collected[: args.max_results]
     source_label = "arXiv API" if used_source == "arxiv" else "OpenAlex（arXiv 备用源）"
     print(f"  采用数据源：{source_label}，收录 {len(picked)} 篇")
