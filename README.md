@@ -27,13 +27,13 @@
 
 ## 🧰 开源项目精选
 
-> ⭐ 数据取自 GitHub API，2026-09-21 复核。
+> ⭐ 数据取自 GitHub API，2026-09-28 复核。
 
 ### 1. 编码 Agent（终端 / IDE）
 
 | 项目 | 说明 | ⭐ |
 |------|------|---|
-| [Claude Code](https://github.com/anthropics/claude-code) | Anthropic 官方终端编码 agent（commercial harness 标杆） | 147k |
+| [Claude Code](https://github.com/anthropics/claude-code) | Anthropic 官方终端编码 agent（commercial harness 标杆） | 148k |
 | [OpenHands](https://github.com/All-Hands-AI/OpenHands) | 全自动软件工程 agent，SWE-bench 领先方案之一 | 89k |
 | [Cline](https://github.com/cline/cline) | 自主编码 agent：SDK + IDE 插件 + CLI | 69k |
 | [Goose](https://github.com/aaif-goose/goose) | 可扩展开源 agent：安装/执行/编辑/测试，支持任意 LLM | 55k |
@@ -52,15 +52,15 @@
 | [LangGraph](https://github.com/langchain-ai/langgraph) | 图状态机式 agent 编排，持久化与人工介入支持完善 | 42k |
 | [ChatDev](https://github.com/OpenBMB/ChatDev) | LLM 驱动的多 agent 协作软件开发（ChatDev 2.0） | 34k |
 | [OpenAI Agents SDK](https://github.com/openai/openai-agents-python) | OpenAI 官方 agent 编排 SDK：handoffs、guardrails、tracing | 30k |
-| [smolagents](https://github.com/huggingface/smolagents) | Hugging Face 极简 code-first agent 库（代码即行动） | 29k |
+| [smolagents](https://github.com/huggingface/smolagents) | Hugging Face 极简 code-first agent 库（代码即行动） | 30k |
 | [Mastra](https://github.com/mastra-ai/mastra) | TypeScript agent 框架（Next.js 生态友好） | 28k |
 | [Vercel AI SDK](https://github.com/vercel/ai) | TypeScript 全栈 AI/agent 工具包 | 27k |
 | [Letta](https://github.com/letta-ai/letta) | 有状态 agent 平台：类 MemGPT 记忆分层，可自我改进 | 25k |
 | [Google ADK](https://github.com/google/adk-python) | Google 官方 Agent Development Kit（A2A 协议原生支持） | 22k |
 | [PydanticAI](https://github.com/pydantic/pydantic-ai) | 类型安全（Pydantic）的 Python agent 框架 | 20k |
-| [ElizaOS](https://github.com/elizaOS/eliza) | 开源 agent 操作系统（AI16Z 团队，多 agent 运行时） | 19k |
+| [ElizaOS](https://github.com/elizaOS/eliza) | 开源 agent 操作系统（AI16Z 团队，多 agent 运行时） | 20k |
 | [CAMEL](https://github.com/camel-ai/camel) | 多 agent 协作框架与"Agent 规模定律"研究 | 18k |
-| [AG2](https://github.com/ag2ai/ag2) | AutoGen 社区延续版（原 autogen 改名），持续活跃 | 4.9k |
+| [AG2](https://github.com/ag2ai/ag2) | AutoGen 社区延续版（原 autogen 改名），持续活跃 | 5.0k |
 
 ### 3. 协议与标准
 
@@ -78,13 +78,13 @@
 
 | 项目 | 说明 | ⭐ |
 |------|------|---|
-| [OpenAI Evals](https://github.com/openai/evals) | OpenAI 官方评测框架 + 基准注册表 | 19k |
+| [OpenAI Evals](https://github.com/openai/evals) | OpenAI 官方评测框架 + 基准注册表 | 20k |
 | [lm-evaluation-harness](https://github.com/EleutherAI/lm-evaluation-harness) | LLM 少样本评测事实标准（EleutherAI） | 14k |
 | [SWE-bench](https://github.com/SWE-bench/SWE-bench) | 真实 GitHub issue 修复基准（编码 agent 事实标准） | 5.9k |
-| [AgentBench](https://github.com/THUDM/AgentBench) | 多环境 LLM-as-Agent 综合评测（ICLR 2024） | 3.7k |
+| [AgentBench](https://github.com/THUDM/AgentBench) | 多环境 LLM-as-Agent 综合评测（ICLR 2024） | 3.8k |
 | [OSWorld](https://github.com/xlang-ai/OSWorld) | 真实计算机环境多模态 agent 评测（NeurIPS 2024） | 3.2k |
-| [Inspect](https://github.com/UKGovernmentBEIS/inspect_ai) | 英国 AI 安全研究所官方评测框架（agent eval 优先） | 2.8k |
-| [MLE-bench](https://github.com/openai/mle-bench) | ML 工程 agent 评测（Kaggle 竞赛环境） | 1.7k |
+| [Inspect](https://github.com/UKGovernmentBEIS/inspect_ai) | 英国 AI 安全研究所官方评测框架（agent eval 优先） | 2.9k |
+| [MLE-bench](https://github.com/openai/mle-bench) | ML 工程 agent 评测（Kaggle 竞赛环境） | 1.8k |
 | [WebArena](https://github.com/web-arena-x/webarena) | 真实网页环境自主 agent 评测环境 | 1.6k |
 | [τ-bench](https://github.com/sierra-research/tau-bench) | 工具-用户交互真实场景基准（含用户模拟） | 1.4k |
 
@@ -111,15 +111,15 @@
 | 列表 | 说明 | ⭐ |
 |------|------|---|
 | [awesome-agent-harness (Picrew)](https://github.com/Picrew/awesome-agent-harness) | 实现优先的 agent harness 工程清单，350+ 条，9 大分类，含中英双语 | 1.8k |
-| [awesome-agent-harness (AutoJunjie)](https://github.com/AutoJunjie/awesome-agent-harness) | harness 工程指南 + 全生命周期平台/编排器/运行时分类 | 523 |
-| [Awesome-Agent-Harness (Gloriaameng)](https://github.com/Gloriaameng/Awesome-Agent-Harness) | 论文与系统并重的 harness 清单 | 357 |
-| [awesome-agent-harness (RUCAIBox)](https://github.com/RUCAIBox/awesome-agent-harness) | 人大 AI Box：harness 论文/系统集 | 200 |
-| [Awesome-Agent-Harness (HKUST-KnowComp)](https://github.com/HKUST-KnowComp/Awesome-Agent-Harness) | 港科大 KnowComp：agent harness 研究资源 | 68 |
+| [awesome-agent-harness (AutoJunjie)](https://github.com/AutoJunjie/awesome-agent-harness) | harness 工程指南 + 全生命周期平台/编排器/运行时分类 | 525 |
+| [Awesome-Agent-Harness (Gloriaameng)](https://github.com/Gloriaameng/Awesome-Agent-Harness) | 论文与系统并重的 harness 清单 | 361 |
+| [awesome-agent-harness (RUCAIBox)](https://github.com/RUCAIBox/awesome-agent-harness) | 人大 AI Box：harness 论文/系统集 | 204 |
+| [Awesome-Agent-Harness (HKUST-KnowComp)](https://github.com/HKUST-KnowComp/Awesome-Agent-Harness) | 港科大 KnowComp：agent harness 研究资源 | 70 |
 | [awesome-ai-agents](https://github.com/e2b-dev/awesome-ai-agents) | 最流行的 AI agent 通用清单 | 30k |
-| [awesome-mcp-servers](https://github.com/punkpeye/awesome-mcp-servers) | MCP 服务器大全（900+） | 95k |
+| [awesome-mcp-servers](https://github.com/punkpeye/awesome-mcp-servers) | MCP 服务器大全（900+） | 96k |
 | [Awesome-MCP-ZH](https://github.com/yzfly/Awesome-MCP-ZH) | MCP 中文精选（中文社区维护） | 7.7k |
 | [awesome-llm-agents](https://github.com/kaushikb11/awesome-llm-agents) | LLM agent 框架/工具清单 | 1.6k |
-| [awesome-llm-powered-agent](https://github.com/hyp1231/awesome-llm-powered-agent) | LLM 驱动 agent 的框架/论文/教程清单 | 2.3k |
+| [awesome-llm-powered-agent](https://github.com/hyp1231/awesome-llm-powered-agent) | LLM 驱动 agent 的框架/论文/教程清单 | 2.2k |
 
 ## 📖 经典论文（入门必读）
 
@@ -165,7 +165,7 @@
 
 - 想收录某个框架/论文/资源？欢迎提 Issue 或 PR。
 - 想手动触发论文更新？仓库 Actions 页面 → **weekly-arxiv-digest** → **Run workflow**。
-- 开源项目链接与 ⭐ 数据在每次人工维护时复核（2026-09-21 复核过一轮）。
+- 开源项目链接与 ⭐ 数据在每次人工维护时复核（2026-09-28 复核过一轮）。
 
 ## 📄 License
 
