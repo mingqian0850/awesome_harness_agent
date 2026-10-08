@@ -14,6 +14,8 @@
 
 ## 📚 每周论文精选（自动更新）
 
+- 人工精选：[2026-10-08：Harness 成本、模块演化与训练数据](papers/curated-2026-10-08.md)（独立于自动周报，标题已由 arXiv API 核验）。
+
 - 最新一期：[papers/README.md](papers/README.md)
 - 历史快照：[papers/archive](papers/archive/)
 - 更新机制：每周日 00:00 UTC 自动运行 [weekly-digest.yml](.github/workflows/weekly-digest.yml)，
@@ -29,6 +31,8 @@
 
 > ⭐ 数据取自 GitHub API，2026-09-28 复核。
 
+> 2026-10-05 增量核验：新增 Codex、Deep Agents 与 `anomalyco/opencode`，星标为当日快照；原 `opencode-ai/opencode` 已归档，其 README 指向后继项目 [Crush](https://github.com/charmbracelet/crush)。两个 OpenCode 仓库应分别识别。
+
 ### 1. 编码 Agent（终端 / IDE）
 
 | 项目 | 说明 | ⭐ |
@@ -40,12 +44,16 @@
 | [Aider](https://github.com/Aider-AI/aider) | 终端结对编程 agent，git 原生集成、diff 审查工作流 | 49k |
 | [Continue](https://github.com/continuedev/continue) | 开源编码 agent，IDE 深度集成 | 36k |
 | [SWE-agent](https://github.com/SWE-agent/SWE-agent) | 论文同源实现：agent-计算机接口（ACI），NeurIPS 2024 | 20k |
-| [OpenCode](https://github.com/opencode-ai/opencode) | 终端 AI 编码 agent，支持 MCP 与多种模型 | 14k |
+| [Codex](https://github.com/openai/codex) | OpenAI 开源终端编码 agent，可作为研究工具执行与本地开发工作流的 harness 实现 | 127.9k |
+| [OpenCode](https://github.com/anomalyco/opencode) | 开源编码 agent，提供终端、桌面与 IDE 使用入口 | 211.8k |
+| [OpenCode（旧 Go 项目，已归档）](https://github.com/opencode-ai/opencode) | 历史实现；原作者与 Charm 团队继续维护 Crush，见仓库迁移说明 | 13.8k |
 
 ### 2. 通用 Agent 框架与 SDK
 
 | 项目 | 说明 | ⭐ |
 |------|------|---|
+| [DeepSeek Harness](https://github.com/deepseek-ai/deepseek-harness) | DeepSeek 官方插件式 agent harness，基于 Cordis；MIT，开发者预览阶段，接口可能不兼容更新（2026-10-08 核验） | — |
+| [Deep Agents](https://github.com/langchain-ai/deepagents) | 基于 LangGraph 的 agent harness：隔离上下文的子 agent、文件系统、上下文压缩、持久记忆与人工介入 | 30.0k |
 | [MetaGPT](https://github.com/FoundationAgents/MetaGPT) | 多 agent 软件公司范式（角色分工流水线） | 71k |
 | [AutoGen](https://github.com/microsoft/autogen) | 微软多 agent 对话/协作框架 | 61k |
 | [CrewAI](https://github.com/crewAIInc/crewAI) | 角色化（Role/Goal/Backstory）多 agent 协作框架 | 59k |
